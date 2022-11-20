@@ -1,27 +1,27 @@
 from tkinter import Tk, Canvas
 from numpy import Infinity
+import time
 
 class Point:
     def __init__(self, x, y) -> None:
         self.x = x
         self.y = y
-    
-
-
 
 class GiftWrapping:
     def __init__(self) -> None:
         self.points = self.read_points_from("sample.txt")
-        self.root = Tk()
-        self.canvas = Canvas(self.root)
+        self.window = Tk()
+        self.canvas = Canvas(self.window)
         self.canvas.pack()
         #self.current_rectangle = self.compute_AABB()
-        self.poly = self.draw_convex_hull(self.compute_convex_hull())
+        # set this initially to a polygon around all points
+        self.compute_convex_hull()
+        #    self.compute_convex_hull())
         for point in self.points:
             self.print_point(point.x, point.y)
 
         self.canvas.bind("<Button-1>", self.handle_click)
-        self.root.mainloop()
+        self.window.mainloop()
 
     def read_points_from(self, file):
         points = []
@@ -32,12 +32,16 @@ class GiftWrapping:
                 points.append(Point(coords[0], coords[1]))
         return points
     
+    def redraw_convex_hull(self, points):
+        self.canvas.delete(self.poly)
+        self.draw_convex_hull(points)
+
     def draw_convex_hull(self, points):
         poly_input = []
         for point in points:
             poly_input.append(point.x)
             poly_input.append(point.y)
-        return self.canvas.create_polygon(poly_input, outline="orange", fill="")
+        self.poly =  self.canvas.create_polygon(poly_input, outline="orange", fill="")
 
     def print_point(self, x, y):
         self.canvas.create_oval(x, y, x, y)
@@ -56,7 +60,7 @@ class GiftWrapping:
         #self.canvas.delete(self.current_rectangle)
         #self.current_rectangle = self.compute_AABB()
         self.canvas.delete(self.poly)
-        self.poly = self.draw_convex_hull(self.compute_convex_hull())
+        self.compute_convex_hull()
 
     def compute_AABB(self):
         x_min = Infinity
@@ -90,9 +94,9 @@ class GiftWrapping:
                 start_point = point
         
         convex_hull = [start_point]
+        self.draw_convex_hull(convex_hull)
         while True:
             endpoint = self.points[0]
-
             for point_to_test in self.points:
                 # we have to span a line here between self.points[-1] and endpoint
                 # and then check if current_point is on the right of that line
@@ -100,6 +104,9 @@ class GiftWrapping:
                 if endpoint == convex_hull[-1] or self.compute_orientation(convex_hull[-1], endpoint, point_to_test):
                     endpoint = point_to_test
             convex_hull.append(endpoint)
+            self.redraw_convex_hull(convex_hull)
+            self.window.update()
+            time.sleep(0.5)
             if endpoint == start_point:
                 break
         return convex_hull
