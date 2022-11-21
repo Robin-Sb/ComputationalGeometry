@@ -9,18 +9,17 @@ class Point:
 
 class GiftWrapping:
     def __init__(self) -> None:
-        self.points = self.read_points_from("sample.txt")
+        self.points = []
         self.window = Tk()
-        self.canvas = Canvas(self.window)
+        self.canvas = Canvas(self.window, width=600, height=600)
         self.canvas.pack()
         #self.current_rectangle = self.compute_AABB()
         # set this initially to a polygon around all points
-        self.compute_convex_hull()
-        #    self.compute_convex_hull())
+        self.poly = None
         for point in self.points:
             self.print_point(point.x, point.y)
-
-        self.canvas.bind("<Button-1>", self.handle_click)
+        self.canvas.bind("<Button-1>", self.handle_lclick)
+        self.canvas.bind("<Button-3>", self.handle_rclick)
         self.window.mainloop()
 
     def read_points_from(self, file):
@@ -32,16 +31,14 @@ class GiftWrapping:
                 points.append(Point(coords[0], coords[1]))
         return points
     
-    def redraw_convex_hull(self, points):
-        self.canvas.delete(self.poly)
-        self.draw_convex_hull(points)
-
     def draw_convex_hull(self, points):
+        if self.poly:
+            self.canvas.delete(self.poly)
         poly_input = []
         for point in points:
             poly_input.append(point.x)
             poly_input.append(point.y)
-        self.poly =  self.canvas.create_polygon(poly_input, outline="orange", fill="")
+        self.poly = self.canvas.create_polygon(poly_input, outline="orange", fill="")
 
     def print_point(self, x, y):
         self.canvas.create_oval(x, y, x, y)
@@ -52,15 +49,14 @@ class GiftWrapping:
     def print_box(self, x_min, x_max, y_min, y_max):
         return self.canvas.create_rectangle(x_min, y_min, x_max, y_max)
 
-    def handle_click(self, click_event):
+    def handle_rclick(self, click_event):
+        self.compute_convex_hull()
+
+    def handle_lclick(self, click_event):
         x = self.canvas.canvasx(click_event.x)
         y = self.canvas.canvasy(click_event.y)
         self.print_point(x, y)
         self.points.append(Point(x, y))
-        #self.canvas.delete(self.current_rectangle)
-        #self.current_rectangle = self.compute_AABB()
-        self.canvas.delete(self.poly)
-        self.compute_convex_hull()
 
     def compute_AABB(self):
         x_min = Infinity
@@ -104,7 +100,7 @@ class GiftWrapping:
                 if endpoint == convex_hull[-1] or self.compute_orientation(convex_hull[-1], endpoint, point_to_test):
                     endpoint = point_to_test
             convex_hull.append(endpoint)
-            self.redraw_convex_hull(convex_hull)
+            self.draw_convex_hull(convex_hull)
             self.window.update()
             time.sleep(0.5)
             if endpoint == start_point:
