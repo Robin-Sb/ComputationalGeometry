@@ -13,9 +13,9 @@ class GiftWrapping:
         self.window = Tk()
         self.canvas = Canvas(self.window, width=600, height=600)
         self.canvas.pack()
-        #self.current_rectangle = self.compute_AABB()
-        # set this initially to a polygon around all points
-        self.poly = None
+        self.convex_hull = None
+        self.pq = None
+        self.qr = None
         for point in self.points:
             self.print_point(point.x, point.y)
         self.canvas.bind("<Button-1>", self.handle_lclick)
@@ -32,13 +32,13 @@ class GiftWrapping:
         return points
     
     def draw_convex_hull(self, points):
-        if self.poly:
-            self.canvas.delete(self.poly)
+        if self.convex_hull:
+            self.canvas.delete(self.convex_hull)
         poly_input = []
         for point in points:
             poly_input.append(point.x)
             poly_input.append(point.y)
-        self.poly = self.canvas.create_polygon(poly_input, outline="orange", fill="")
+        self.convex_hull = self.canvas.create_polygon(poly_input, outline="orange", fill="")
 
     def print_point(self, x, y):
         self.canvas.create_oval(x, y, x, y)
@@ -51,6 +51,10 @@ class GiftWrapping:
 
     def handle_rclick(self, click_event):
         self.compute_convex_hull()
+        self.canvas.delete(self.pq)
+        self.canvas.delete(self.qr)
+        self.pq = None
+        self.qr = None
 
     def handle_lclick(self, click_event):
         x = self.canvas.canvasx(click_event.x)
@@ -58,11 +62,21 @@ class GiftWrapping:
         self.print_point(x, y)
         self.points.append(Point(x, y))
 
+    def draw_line_between(self, p, q, r):
+        if self.pq:
+            self.canvas.delete(self.pq)
+        if self.qr:
+            self.canvas.delete(self.qr)
+        
+        self.pq = self.canvas.create_line(p.x, p.y, q.x, q.y, fill="green")
+        self.qr = self.canvas.create_line(q.x, q.y, r.x, r.y, fill="green")
+
     def compute_AABB(self):
-        x_min = Infinity
-        x_max = -Infinity
-        y_min = Infinity
-        y_max = -Infinity
+        #arbitrary start value
+        x_min = 2 ** 32
+        x_max = -2 ** 32
+        y_min = 2 ** 32
+        y_max = -2 ** 32
         for point in self.points:
             if point.x < x_min:
                 x_min = point.x
@@ -94,10 +108,13 @@ class GiftWrapping:
         while True:
             endpoint = self.points[0]
             for point_to_test in self.points:
-                # we have to span a line here between self.points[-1] and endpoint
-                # and then check if current_point is on the right of that line
-                # q is (x, y), r is endpoint and p is self.points[-1] 
-                if endpoint == convex_hull[-1] or self.compute_orientation(convex_hull[-1], endpoint, point_to_test):
+                p = convex_hull[-1]
+                q = endpoint
+                r = point_to_test
+                self.draw_line_between(p, q, r)
+                self.window.update()
+                time.sleep(0.3)
+                if q == p or self.compute_orientation(p, q, r):
                     endpoint = point_to_test
             convex_hull.append(endpoint)
             self.draw_convex_hull(convex_hull)
