@@ -1,5 +1,4 @@
 from tkinter import Tk, Canvas
-from numpy import Infinity
 import time
 
 class Point:
@@ -98,7 +97,7 @@ class GiftWrapping:
 
     def compute_convex_hull(self):
         # find minimum y coordinate
-        start_point = Point(0, -Infinity)
+        start_point = Point(0, -2 ** 32)
         for point in self.points:
             if point.y > start_point.y:
                 start_point = point
