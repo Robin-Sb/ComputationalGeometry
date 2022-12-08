@@ -20,9 +20,6 @@ class DrawHandler:
         self.x_lb_field = Entry(self.window, text="x lower bound", bd=5)
         self.x_ub_field = Entry(self.window, text="x upper bound", bd=5)
         self.y_lb_field = Entry(self.window, text="y lower bound", bd=5)
-        
-        # self.x_lb_field.place(x=0, y = 800)
-        # self.x_ub_field.place(x=200, y = 800)
         self.canvas.pack() 
         Label(self.window, text="x lower bound").pack(side=LEFT)
         self.x_lb_field.pack(side=LEFT)
