@@ -1,6 +1,7 @@
 from tkinter import Tk, Canvas, Entry, LEFT, Label, Button, BOTTOM
 import random
 import math
+import time
 
 class Point:
     def __init__(self, x, y) -> None:
@@ -9,9 +10,10 @@ class Point:
 
 class DrawHandler:
     def __init__(self) -> None:
+        self.benchmark = True
         self.window = Tk()
-        self.canvas_x = 600
-        self.canvas_y = 600
+        self.canvas_x = 800
+        self.canvas_y = 800
         self.canvas = Canvas(self.window, width=self.canvas_x, height=self.canvas_y)
         self.points = []
         
@@ -29,7 +31,7 @@ class DrawHandler:
         Label(self.window, text="y lower bound").pack(side=LEFT)
         self.y_lb_field.pack(side=LEFT)       
         self.algo_start_button = Button(self.window, text="Compute intersection", command=self.query_pst)
-        self.algo_start_button.pack(side=BOTTOM)
+        self.algo_start_button.pack(side=LEFT)
 
         self.canvas.bind("<Button-1>", self.handle_lclick)
         self.canvas.bind("<Button-3>", self.handle_rclick)
@@ -37,19 +39,26 @@ class DrawHandler:
 
         self.window.mainloop()
 
-
     def query_pst(self):
         self.canvas.delete("all")
         x_lower = int(self.x_lb_field.get())
         x_upper = int(self.x_ub_field.get())
         y_lower = int(self.y_lb_field.get())
+        startTimePST = time.time()
         self.pst.query(x_lower, x_upper, y_lower)
+        print(time.time() - startTimePST)
+
+        if self.benchmark:
+            startTimeNaive = time.time()
+            naive_result = self.computeNaiveSolution(x_lower, x_upper, y_lower)
+            naive_result 
+            print(time.time() - startTimeNaive)
+
         for point in self.points:
             if point in self.pst.result:
                 self.print_point(point.x, point.y, "orange")
             else:
                 self.print_point(point.x, point.y, "black")
-        
         self.print_box(x_lower, x_upper, 0, y_lower)
 
     def print_point(self, x, y, color="black"):
@@ -64,6 +73,13 @@ class DrawHandler:
     def print_box(self, x_min, x_max, y_min, y_max):
         self.canvas.create_rectangle(x_min, y_min, x_max, y_max, outline="blue")
 
+    def computeNaiveSolution(self, x_lower, x_upper, y_lower):
+        result = []
+        for point in self.points:
+            if point.x >= x_lower and point.x <= x_upper and point.y <= y_lower:
+                result.append(point)
+        return result
+    
     def create_random_points(self):
         for i in range(1000):
             x = random.randint(0, self.canvas_x)
