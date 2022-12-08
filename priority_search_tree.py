@@ -10,8 +10,8 @@ class Point:
 class DrawHandler:
     def __init__(self) -> None:
         self.window = Tk()
-        self.canvas_x = 800
-        self.canvas_y = 800
+        self.canvas_x = 600
+        self.canvas_y = 600
         self.canvas = Canvas(self.window, width=self.canvas_x, height=self.canvas_y)
         self.points = []
         
@@ -31,23 +31,15 @@ class DrawHandler:
         self.algo_start_button = Button(self.window, text="Compute intersection", command=self.query_pst)
         self.algo_start_button.pack(side=BOTTOM)
 
-        self.create_random_points()
         self.canvas.bind("<Button-1>", self.handle_lclick)
         self.canvas.bind("<Button-3>", self.handle_rclick)
-        for point in self.points:
-            self.print_point(point.x, point.y, "black")
-        
-        self.pst = PrioritySearchTree()
-        # c_points = [
-        #         Point(200, 400), Point(150, 200), Point(250, 150), Point(300, 100),
-        #         Point(350, 650), Point(450, 400), Point(500, 200), Point(600, 250), 
-        #         Point(650, 150), Point(700, 550)
-        #     ]
-        self.pst.create(self.points)
+        self.create_random_points()
+
         self.window.mainloop()
 
 
     def query_pst(self):
+        self.canvas.delete("all")
         x_lower = int(self.x_lb_field.get())
         x_upper = int(self.x_ub_field.get())
         y_lower = int(self.y_lb_field.get())
@@ -55,24 +47,31 @@ class DrawHandler:
         for point in self.points:
             if point in self.pst.result:
                 self.print_point(point.x, point.y, "orange")
-            else:  
+            else:
                 self.print_point(point.x, point.y, "black")
+        
+        self.print_box(x_lower, x_upper, 0, y_lower)
 
-
-    def print_point(self, x, y, color):
+    def print_point(self, x, y, color="black"):
         self.canvas.create_oval(x, y, x, y, outline=color, width=2)
 
     def handle_lclick(self, event):
         pass
 
     def handle_rclick(self, event):
-        pass
+        self.create_random_points()
+
+    def print_box(self, x_min, x_max, y_min, y_max):
+        self.canvas.create_rectangle(x_min, y_min, x_max, y_max, outline="blue")
 
     def create_random_points(self):
         for i in range(1000):
             x = random.randint(0, self.canvas_x)
             y = random.randint(0, self.canvas_y)
             self.points.append(Point(x, y))
+            self.print_point(x, y)
+        self.pst = PrioritySearchTree()
+        self.pst.create(self.points)
 
 class Node: 
     def __init__(self, point):
