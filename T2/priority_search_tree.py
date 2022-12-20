@@ -8,6 +8,7 @@ class Point:
         self.x = x
         self.y = y
 
+# class is only used for handling the UI and storing a reference to the tree 
 class DrawHandler:
     def __init__(self) -> None:
         self.benchmark = True
@@ -17,6 +18,7 @@ class DrawHandler:
         self.canvas = Canvas(self.window, width=self.canvas_x, height=self.canvas_y)
         self.points = []
         
+        # UI handling
         self.x_lb_field = Entry(self.window, text="x lower bound", bd=5)
         self.x_ub_field = Entry(self.window, text="x upper bound", bd=5)
         self.y_lb_field = Entry(self.window, text="y lower bound", bd=5)
@@ -27,12 +29,12 @@ class DrawHandler:
         self.x_ub_field.pack(side=LEFT)       
         Label(self.window, text="y lower bound").pack(side=LEFT)
         self.y_lb_field.pack(side=LEFT)       
-        self.algo_start_button = Button(self.window, text="Compute intersection", command=self.query_pst)
+        self.algo_start_button = Button(self.window, text="Search", command=self.query_pst)
         self.algo_start_button.pack(side=LEFT)
 
         self.canvas.bind("<Button-1>", self.handle_lclick)
         self.canvas.bind("<Button-3>", self.handle_rclick)
-        self.create_random_points()
+        #self.create_random_points()
 
         self.window.mainloop()
 
@@ -41,15 +43,18 @@ class DrawHandler:
         x_lower = int(self.x_lb_field.get())
         x_upper = int(self.x_ub_field.get())
         y_lower = int(self.y_lb_field.get())
-        startTimePST = time.time()
-        self.pst.query(x_lower, x_upper, y_lower)
-        print(time.time() - startTimePST)
-
+        # very simple benchmarking
         if self.benchmark:
             startTimeNaive = time.time()
             naive_result = self.computeNaiveSolution(x_lower, x_upper, y_lower)
             naive_result 
-            print(time.time() - startTimeNaive)
+            print("time naive: " + str(time.time() - startTimeNaive))
+
+        startTimePST = time.time()
+        self.pst.query(x_lower, x_upper, y_lower)
+        print("time pst: " + str(time.time() - startTimePST))
+        print("Number of points: " + str(len(self.points)))
+        print("Number of points observed: " + str(self.pst.count))
 
         for point in self.points:
             if point in self.pst.result:
@@ -62,7 +67,12 @@ class DrawHandler:
         self.canvas.create_oval(x, y, x, y, outline=color, width=2)
 
     def handle_lclick(self, event):
-        pass
+        x = self.canvas.canvasx(event.x)
+        y = self.canvas.canvasy(event.y)
+        self.print_point(x, y)
+        self.points.append(Point(x, y))
+        self.pst = PrioritySearchTree()
+        self.pst.create(self.points)
 
     def handle_rclick(self, event):
         self.create_random_points()
@@ -97,6 +107,7 @@ class PrioritySearchTree:
     def __init__(self) -> None:
         self.root = None
 
+    # split list into left and right half according to x coordinate
     def half_list(self, points):
         n_points = len(points)
         mid_idx = math.floor(n_points / 2)
@@ -110,7 +121,6 @@ class PrioritySearchTree:
 
     def find_max_point(self, points):
         top_y = 2 ** 32
-        # root is point with lowest y coordinate, maybe generalize to arbitrary dimension
         max_idx = -1
         for idx, point in enumerate(points):
             if point.y < top_y:
@@ -125,39 +135,44 @@ class PrioritySearchTree:
         del points[top_idx]
         return node
 
+    def assign_subnodes(self, node, points):
+        left_points, right_points, x_divisor = self.half_list(points)
+        node.x_divisor = x_divisor
+
+        if left_points:
+            node.l_child = self.subdivide(left_points)
+        if right_points:
+            node.r_child = self.subdivide(right_points)
+
     def create(self, input):
         points = input.copy()
         if not points:
             return
         self.root = self.create_node(points)
+        if not points:
+            return    
         points_sorted = sorted(points, key = lambda p: p.x)
-        left_points, right_points, x_divisor = self.half_list(points_sorted)
-        self.root.x_divisor = x_divisor
 
-        self.root.l_child = self.subdivide(left_points)
-        self.root.r_child = self.subdivide(right_points)
+        self.assign_subnodes(self.root, points_sorted)
 
     def subdivide(self, points) -> Node:
         new_node = self.create_node(points)
         if not points:
             return new_node
-        left_points, right_points, x_divisor = self.half_list(points)
-        new_node.x_divisor = x_divisor
-        if left_points:
-            new_node.l_child = self.subdivide(left_points)
-        if right_points:
-            new_node.r_child = self.subdivide(right_points)
+        self.assign_subnodes(new_node, points)
         return new_node
 
     def query(self, x_lower, x_upper, y_lower):
+        self.count = 0
         self.result = set()
         self.rec_search(self.root, x_lower, x_upper, y_lower)
     
     def rec_search(self, node, x_lower, x_upper, y_lower):
+        self.count += 1
         if node.point.y > y_lower:
             return
         
-        if  x_upper >= node.point.x  and node.point.x >= x_lower:
+        if x_upper >= node.point.x and node.point.x >= x_lower:
             self.result.add(node.point)
         
         if x_lower <= node.x_divisor:
