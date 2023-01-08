@@ -20,6 +20,9 @@ class Constraint:
         # self.y_term = 1
         # self.b = intercept
 
+    def calc_y(self, x):
+        return self.m * x + self.b
+
 class LinearProgram:
     def __init__(self) -> None:
         self.constraints = []
@@ -30,22 +33,6 @@ class LinearProgram:
         return constraint
 
     def compute_intersection(self, l1, l2):
-        # intersect_x = (l1.y_term * l2.b - l2.y_term * l1.b) / (l1.x_term * l2.y_term - l2.x_term * l1.y_term)
-        # intersect_y = (l1.b * l2.x_term - l2.b * l1.x_term) / (l1.x_term * l2.y_term - l2.x_term * l1.y_term)
-        # x1 = l1.p1.x
-        # x2 = l1.p2.x
-        # x3 = l2.p1.x
-        # x4 = l2.p2.x
-        # y1 = l1.p1.y
-        # y2 = l1.p2.y
-        # y3 = l2.p1.y
-        # y4 = l2.p2.y
-
-        # denom = (x1 - x2)*(y3-y4) - (y1-y2)*(x3-x4)
-        
-        # px = (x1*y2 - y1*x2)*(x3 - x4) - (x1 - x2)*(x3*y4 - y3*x4)/denom
-        # py = (x1*y2 - y1*x2)*(y3 - y4) - (y1 - y2)*(x3*y4 - y3*x4)/denom
-
         x = (l2.b - l1.b) / (l1.m - l2.m)
         y = l1.m * x + l1.b
         return Vec2(x, y)
@@ -64,10 +51,71 @@ class LinearProgram:
 
         if len(down) >= 2:
             intersection = self.compute_intersection(down[0], down[1])
-        elif (len(up) >= 2):
+        elif len(up) >= 2:
             intersection = self.compute_intersection(up[0], up[1])
         
+        # g denotes the upper bound, so the minimum constraint where the normal points downwards (at pos x)
+        g = 1
+        # h denotes the lower bound
+        h = 0
+        # floating point
+        eps = 0.0001
+        upper = []
+        for constraint in up:
+            y_intersect = constraint.calc_y(intersection.x) 
+            # constraint that fulfills g with equality
+            if abs(g - y_intersect) < eps:
+                upper.append(constraint)
+            elif y_intersect < g:
+                g = y_intersect
+                upper = [constraint]
         
+        lower = []
+        for constraint in down:
+            y_intersect = constraint.calc_y(intersection.x) 
+            if abs(h - y_intersect) < eps:
+                lower.append(constraint)
+            if y_intersect > h:
+                h = y_intersect
+                lower = [constraint]
+        # min angle wrt g
+        g_min = 1
+        # max angle wrt g
+        g_max = -1
+        h_min = 1
+        h_max = -1
+        for up_constraint in upper:
+            if up_constraint.m < g_min:
+                g_min = up_constraint.m
+            if up_constraint.m > g_max:
+                g_max = up_constraint.m
+
+        for down_constraint in lower:
+            if down_constraint.m < h_min:
+                h_min = up_constraint.m
+            if down_constraint.m > h_max:
+                h_max = down_constraint.m
+
+        # no feasible solution exists
+        if g_min <= h_max and g_max >= h_min:
+            return None
+            
+        # optimal solution
+        if g_min < 0 and g_max > 0:
+            return intersection
+
+        # optimal solution to the right
+        if g_min < 0 and g_max < 0:
+            pass
+
+        # optimal solution to the left
+        if g_min > 0 and g_max > 0:
+            pass
+
+        # infeasible at pos x
+        if h > g:
+            pass
+            
 
 class DrawHandler:
     def __init__(self) -> None:
