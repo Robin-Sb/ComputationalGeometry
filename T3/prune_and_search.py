@@ -1,7 +1,7 @@
 from tkinter import Tk, Canvas, Button
 import math
 
-class Vec2:
+class Vec2():
     def __init__(self, x, y) -> None:
         self.x = x
         self.y = y
