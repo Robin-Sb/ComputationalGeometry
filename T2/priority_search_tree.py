@@ -61,6 +61,7 @@ class DrawHandler:
                 self.print_point(point.x, point.y, "orange")
             else:
                 self.print_point(point.x, point.y, "black")
+        print("Number of found points: " + str(len(self.pst.result)))
         self.print_box(x_lower, x_upper, 0, y_lower)
 
     def print_point(self, x, y, color="black"):
