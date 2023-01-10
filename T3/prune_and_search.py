@@ -8,14 +8,18 @@ class Vec2():
 
 class Constraint:
     def __init__(self, start, end) -> None:
-        self.p1 = start 
-        self.p2 = end
+        if end.x > start.x:
+            self.p1 = start 
+            self.p2 = end
+        else:
+            self.p2 = start
+            self.p1 = end
         dx = self.p2.x - self.p1.x
         dy = self.p2.y - self.p1.y
         length = math.sqrt(dx ** 2 + dy ** 2)
-        self.normal = Vec2(-dy / length, dx / length)
+        self.normal = Vec2(-(end.y - start.y) / length, (end.x - start.x) / length)
         self.m = dy / dx
-        self.b = start.y - self.m * start.x
+        self.b = self.p1.y - self.m * self.p1.x
         # self.x_term = -m
         # self.y_term = 1
         # self.b = intercept
@@ -92,7 +96,7 @@ class LinearProgram:
 
         for down_constraint in lower:
             if down_constraint.m < h_min:
-                h_min = up_constraint.m
+                h_min = down_constraint.m
             if down_constraint.m > h_max:
                 h_max = down_constraint.m
 
@@ -147,19 +151,19 @@ class DrawHandler:
         self.add_constraint()
 
     def to_cartesian(self, point):
-        x = 1 - (point.x / self.canvas_x)
+        x = point.x / self.canvas_x
         y = 1 - (point.y / self.canvas_y)
         return Vec2(x, y)
 
     def from_cartesian(self, point):
-        x = self.canvas_x - (point.x * self.canvas_x)
+        x = point.x * self.canvas_x
         y = self.canvas_y - (point.y * self.canvas_y)
         return Vec2(x, y)
 
     def draw_line(self, start, end, color = "black"):
         p1 = self.from_cartesian(start)
         p2 = self.from_cartesian(end)
-        self.canvas.create_line(p1.x, p1.y, p2.x, p2.y, width=5, fill=color)
+        self.canvas.create_line(p1.x, p1.y, p2.x, p2.y, width=2, fill=color)
 
     def draw_constraint(self, constraint):
         y_right = constraint.m * 1 + constraint.b
@@ -175,7 +179,7 @@ class DrawHandler:
             points.append(Vec2(1, y_right))
         if y_left >= 0 and y_left <=1:
             points.append(Vec2(0, y_left))
-        if x_bottom >= 0 and x_top <=1:
+        if x_bottom >= 0 and x_bottom <=1:
             points.append(Vec2(x_bottom, 0))
         if x_top >= 0 and x_top <= 1:
             points.append(Vec2(x_top, 1))
@@ -197,7 +201,7 @@ class DrawHandler:
     
     def draw_point(self, point):
         point = self.from_cartesian(point)
-        self.canvas.create_oval(point.x - 5, point.y -5, point.x + 5, point.y + 5, fill="green")
+        self.canvas.create_oval(point.x - 5, point.y - 5, point.x + 5, point.y + 5, fill="green")
 
     def prune_and_search(self):
         self.lp.prune()
