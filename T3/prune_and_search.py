@@ -1,10 +1,18 @@
+# paper: https://theory.stanford.edu/~megiddo/pdf/lp3.pdf
+
 from tkinter import Tk, Canvas, Button
 import math
+
+MAX_INT = 4294967296
 
 class Vec2():
     def __init__(self, x, y) -> None:
         self.x = x
         self.y = y
+
+
+def same_sign(x1, x2):
+    return (x1 < 0) == (x2 < 0)
 
 class Constraint:
     def __init__(self, start, end) -> None:
@@ -20,9 +28,6 @@ class Constraint:
         self.normal = Vec2(-(end.y - start.y) / length, (end.x - start.x) / length)
         self.m = dy / dx
         self.b = self.p1.y - self.m * self.p1.x
-        # self.x_term = -m
-        # self.y_term = 1
-        # self.b = intercept
 
     def calc_y(self, x):
         return self.m * x + self.b
@@ -40,8 +45,121 @@ class LinearProgram:
         x = (l2.b - l1.b) / (l1.m - l2.m)
         y = l1.m * x + l1.b
         return Vec2(x, y)
+    
+    # this one seems to work
+    def brute_force(self, constraints):
+        result = Vec2(0, MAX_INT)
+        feasible = False
+        for i, c1 in enumerate(constraints):
+            for j, c2 in enumerate(constraints):
+                if i == j:
+                    continue
+                intersection = self.compute_intersection(c1, c2)
+                local_feasible = True
+                for k, c3 in enumerate(constraints):
+                    if k == i or k == j:
+                        continue
+                    y = c3.calc_y(intersection.x)
+                    if same_sign(y - intersection.y, c3.normal.y):
+                        local_feasible = False
+                if not local_feasible:
+                    continue
+                feasible = True
+                if intersection.y < result.y:
+                    result = intersection
+        if feasible:
+            return result
+        else:
+            return None
 
-    def prune(self):
+    def generate_tuple(self, constraint_list):
+        result = []
+        for idx in range(0, len(constraint_list), 2):
+            result.append((constraint_list[idx], constraint_list[idx + 1]))
+        return result
+
+    def find_median(self, pairs):
+        intersections = []
+        for constraint1, constraint2 in pairs:
+            intersection = self.compute_intersection(constraint1, constraint2)
+            intersections.append(intersection)
+        median_x = intersections[math.floor(len(intersections) / 2)].x
+        median_y = intersections[math.floor(len(intersections) / 2)].y        
+        return Vec2(median_x, median_y)
+
+    def find_bound(self, constraints, median, isUp):
+        eps = 0.0001
+        bound = []
+        if isUp:
+            value = -MAX_INT
+        else: 
+            value = MAX_INT
+        for constraint in constraints:
+            y_intersect = constraint.calc_y(median.x) 
+            # constraints that fulfills g with equality
+            if abs(value - y_intersect) < eps:
+                bound.append(constraint)
+            elif (isUp and y_intersect > value) or (not isUp and y_intersect < value):
+                value = y_intersect
+                bound = [constraint]
+        return value, bound
+
+    def find_slopes(self, bound):
+        val_min = MAX_INT
+        val_max = -MAX_INT
+        for constraint in bound:
+            val_min = min(constraint.m, val_min)
+            val_max = max(constraint.m, val_max)
+
+    def prune_and_search(self, up, down):
+        a = -MAX_INT
+        b = MAX_INT
+        while (len(up) + len(down)) > 2:
+            up_pairs = self.generate_tuple(up)
+            down_pairs = self.generate_tuple(down)
+            if len(up) >= len(down):
+                isUp = True
+                pairs = up_pairs
+            else:
+                isUp = False
+                pairs = down_pairs
+            
+            median = self.find_median(pairs)
+            # g denotes the lower bound, so the maximum constraint where the normal points upwards (at pos x)
+            g, lower = self.find_bound(up, median, isUp)
+            # h denotes the upper bound
+            h, upper = self.find_bound(down, median, isUp)
+            
+            # min, max slope wrt g
+            g_min, g_max = self.find_slopes(lower) #sg, Sg
+            # min, max slope wrt h
+            h_min, h_max = self.find_slopes(upper) #sh, Sh
+
+            # no feasible solution exists
+            if g_min <= h_max and g_max >= h_min:
+                return None
+
+            # point is not feasible, change interval in correct direction
+            if g > h:
+                # median is left of feasible region -> go right
+                if g_min > h_max:
+                    b = median.x
+                # median is right of feasible region -> go left
+                if g_max < h_min:
+                    a = median.x
+            # point is feasible, check which constraints to prune
+            else:
+                if g_min < 0 and g_min >= h_max:
+                    b = median.x
+                if g_max < 0 and g_max <= h_min:
+                    a = median.x
+            # optimal solution
+            if g_min < 0 and g_max > 0:
+                return median
+        return self.brute_force(up + down)
+
+    def solve(self):
+        return self.brute_force(self.constraints)
         up = []
         down = []
         for constraint in self.constraints:
@@ -49,76 +167,9 @@ class LinearProgram:
                 up.append(constraint)
             else:
                 down.append(constraint)
-        
-        if len(up) and len(down) < 2:
-            return
+    
+        self.prune_and_search(up, down)
 
-        if len(down) >= 2:
-            intersection = self.compute_intersection(down[0], down[1])
-        elif len(up) >= 2:
-            intersection = self.compute_intersection(up[0], up[1])
-        
-        # g denotes the upper bound, so the minimum constraint where the normal points downwards (at pos x)
-        g = 1
-        # h denotes the lower bound
-        h = 0
-        # floating point
-        eps = 0.0001
-        upper = []
-        for constraint in up:
-            y_intersect = constraint.calc_y(intersection.x) 
-            # constraint that fulfills g with equality
-            if abs(g - y_intersect) < eps:
-                upper.append(constraint)
-            elif y_intersect < g:
-                g = y_intersect
-                upper = [constraint]
-        
-        lower = []
-        for constraint in down:
-            y_intersect = constraint.calc_y(intersection.x) 
-            if abs(h - y_intersect) < eps:
-                lower.append(constraint)
-            if y_intersect > h:
-                h = y_intersect
-                lower = [constraint]
-        # min angle wrt g
-        g_min = 1
-        # max angle wrt g
-        g_max = -1
-        h_min = 1
-        h_max = -1
-        for up_constraint in upper:
-            if up_constraint.m < g_min:
-                g_min = up_constraint.m
-            if up_constraint.m > g_max:
-                g_max = up_constraint.m
-
-        for down_constraint in lower:
-            if down_constraint.m < h_min:
-                h_min = down_constraint.m
-            if down_constraint.m > h_max:
-                h_max = down_constraint.m
-
-        # no feasible solution exists
-        if g_min <= h_max and g_max >= h_min:
-            return None
-            
-        # optimal solution
-        if g_min < 0 and g_max > 0:
-            return intersection
-
-        # optimal solution to the right
-        if g_min < 0 and g_max < 0:
-            pass
-
-        # optimal solution to the left
-        if g_min > 0 and g_max > 0:
-            pass
-
-        # infeasible at pos x
-        if h > g:
-            pass
             
 
 class DrawHandler:
@@ -134,6 +185,10 @@ class DrawHandler:
         self.canvas.bind("<Button-1>", self.handle_lclick)
         self.canvas.bind("<Button-3>", self.handle_rclick)
         Button(self.window, text="Prune and Search", command=self.prune_and_search).pack()
+        self.add_constraint(Vec2(500, 160), Vec2(100, 150)) 
+        self.add_constraint(Vec2(100, 150), Vec2(120, 460))
+        self.add_constraint(Vec2(200, 500), Vec2(310, 510))
+        self.add_constraint(Vec2(450, 450), Vec2(440, 200))
 
         self.window.mainloop()
 
@@ -141,14 +196,14 @@ class DrawHandler:
     def handle_lclick(self, event):
         x = self.canvas.canvasx(event.x)
         y = self.canvas.canvasy(event.y)
-        self.start_pos = self.to_cartesian(Vec2(x, y))
-        self.add_constraint()
+        self.start_pos = Vec2(x, y)
+        self.add_constraint(self.start_pos, self.end_pos)
 
     def handle_rclick(self, event):
         x = self.canvas.canvasx(event.x)
         y = self.canvas.canvasy(event.y)
-        self.end_pos = self.to_cartesian(Vec2(x, y))
-        self.add_constraint()
+        self.end_pos = Vec2(x, y)
+        self.add_constraint(self.start_pos, self.end_pos)
 
     def to_cartesian(self, point):
         x = point.x / self.canvas_x
@@ -191,9 +246,11 @@ class DrawHandler:
         
 
     # maybe call this from some other event instead of when points are set
-    def add_constraint(self):
-        if self.start_pos and self.end_pos:
-            constraint = self.lp.add_constraint(self.start_pos, self.end_pos)
+    def add_constraint(self, start, end):
+        if start and end:
+            p1 = self.to_cartesian(start)
+            p2 = self.to_cartesian(end)
+            constraint = self.lp.add_constraint(p1, p2)
             self.draw_constraint(constraint)
             #self.draw_line(self.start_pos, self.end_pos)
             self.start_pos = None
@@ -203,7 +260,9 @@ class DrawHandler:
         point = self.from_cartesian(point)
         self.canvas.create_oval(point.x - 5, point.y - 5, point.x + 5, point.y + 5, fill="green")
 
-    def prune_and_search(self):
-        self.lp.prune()
+    def solve_lp(self):
+        result = self.lp.solve()
+        if result:
+            self.draw_point(result)
 
 dh = DrawHandler()
