@@ -71,7 +71,6 @@ class LinearProgram:
                 c.normal = Vec2(-c.normal.x, -c.normal.y)
             self.constraints.append(c)
 
-    # this one seems to work
     def brute_force(self, constraints):
         result = Vec2(0, MAX_INT)
         feasible = False
@@ -152,7 +151,6 @@ class LinearProgram:
             if abs(l1.m - l2.m) < EPS:
                 if op(l1.b, l2.b):
                     line_to_remove = l1
-                    # this is not really linear anymore, fix later
                 else:
                     line_to_remove = l2
             # intersection is left of lower bound
@@ -226,8 +224,6 @@ class LinearProgram:
                     return median
             # point is feasible and g = h
             # somewhat theoretical case because of floating point precision
-            # i could see that this actually returns wrong results if two lines are exactly the same, one pointing up and one down
-            # and the one pointing up is slightly shifted above because of floating point precision
             else:
                 if g_min > 0 and g_min >= h_max:
                     b = median.x
@@ -241,7 +237,6 @@ class LinearProgram:
         return self.brute_force(up + down)
 
     def solve(self):
-        #return self.brute_force(self.constraints)
         up = []
         down = []
         for constraint in self.constraints:
@@ -272,7 +267,6 @@ class DrawHandler:
         Button(self.window, text="Solve", command=self.solve_lp).pack()
         Button(self.window, text="Clear everything", command=self.clear).pack()
         Button(self.window, text="Clear visualization steps", command=self.clear_drawing).pack()
-        #self.generate_lp()
         self.lp_drawing = []
         self.lp_solve_vis = []
         self.window.mainloop()
@@ -294,6 +288,7 @@ class DrawHandler:
             self.canvas.delete(obj)
         for obj in self.lp_solve_vis:
             self.canvas.delete(obj)
+        self.lp = LinearProgram()
 
     def clear_drawing(self):
         for obj in self.lp_solve_vis:
@@ -357,7 +352,7 @@ class DrawHandler:
         if not amount:
             return
         self.clear()
-        self.lp = LinearProgram()
+        
         self.lp.generate(int(amount))
         for constraints in self.lp.constraints:
             line = self.draw_constraint(constraints)
@@ -384,6 +379,12 @@ class DrawHandler:
             self.lp_solve_vis.append(point)
             self.window.update()
             time.sleep(0.3)
+            if i > 0:
+                obj_idx = len(self.lp_solve_vis) - len(leftovers) - 2
+                self.canvas.delete(self.lp_solve_vis[obj_idx])
+                w_point = self.draw_point(intersection_log[i - 1], size=3, color="white")
+                self.lp_solve_vis[obj_idx] = w_point
+
             self.redraw_constraints(leftovers)
             leftovers = []
 
@@ -395,10 +396,19 @@ class DrawHandler:
         self.redraw_constraints(leftovers)
 
     def solve_lp(self):
+        if len(self.lp.constraints) <= 300:
+            bf_start = time.time()
+            self.lp.brute_force(self.lp.constraints)
+            bf_end = time.time()
+            print("brute force: " + str(bf_end - bf_start))
+        pns_start = time.time()
         result = self.lp.solve()
+        pns_end = time.time()
+        print("prune and search: " + str(pns_end - pns_start))
         if result:
             print("opt.x: " + str(result.x) + ", op.y: " + str(result.y))
-            self.visualize_pns()
+            if len(self.lp.constraints) <= 300:
+                self.visualize_pns()
             opt_point = self.draw_point(result)
             self.lp_solve_vis.append(opt_point)
         else:
