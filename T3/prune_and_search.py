@@ -2,8 +2,9 @@
 
 from tkinter import Tk, Canvas, Button
 import math
+import random
 
-# this is actually 2 ** 32 and not the real max int in python
+# this is actually 2 ** 32 and not the real max int in python (int is unbound)
 MAX_INT = 4294967296
 # floating point offset
 EPS = 0.000001
@@ -13,13 +14,19 @@ class Vec2():
         self.x = x
         self.y = y
 
+    def dot(self, v):
+        return self.x * v.x + self.y * v.y
+    
+    def sub(self, v):
+        return Vec2(self.x - v.x, self.y - v.y)
+
 def same_sign(x1, x2):
     return (x1 < 0) == (x2 < 0)
 
 class Constraint:
     def __init__(self, start, end) -> None:
         if end.x > start.x:
-            self.p1 = start 
+            self.p1 = start
             self.p2 = end
         else:
             self.p2 = start
@@ -47,7 +54,20 @@ class LinearProgram:
         x = (l2.b - l1.b) / (l1.m - l2.m)
         y = l1.m * x + l1.b
         return Vec2(x, y)
-    
+
+    def generate(self, number):
+        reference = Vec2(0.5, 0.5)
+        for i in range(number):
+            # generate two random points and set constraints so that normal points in the direction of coordinate center point
+            p1 = Vec2(random.random(), random.random())
+            p2 = Vec2(random.random(), random.random())
+            c = Constraint(p1, p2)
+            distance = c.normal.dot(reference.sub(c.p1))
+            # just swap normal if of wrong side of halfspace
+            if (distance < 0):
+                c.normal = Vec2(-c.normal.x, -c.normal.y)
+            self.constraints.append(c)
+
     # this one seems to work
     def brute_force(self, constraints):
         result = Vec2(0, MAX_INT)
@@ -233,15 +253,10 @@ class DrawHandler:
         self.lp = LinearProgram()
         self.canvas.bind("<Button-1>", self.handle_lclick)
         self.canvas.bind("<Button-3>", self.handle_rclick)
-        Button(self.window, text="Prune and Search", command=self.solve_lp).pack()
-        self.add_constraint(Vec2(500, 160), Vec2(100, 150)) 
-        self.add_constraint(Vec2(100, 150), Vec2(120, 460))
-        self.add_constraint(Vec2(200, 500), Vec2(310, 510))
-        self.add_constraint(Vec2(450, 450), Vec2(440, 200))
-
+        Button(self.window, text="Solve", command=self.solve_lp).pack()
+        self.generate_lp()
         self.window.mainloop()
 
-        
     def handle_lclick(self, event):
         x = self.canvas.canvasx(event.x)
         y = self.canvas.canvasy(event.y)
@@ -279,32 +294,36 @@ class DrawHandler:
         # vertical lines
         # diagonal lines, where the condition is true for 4 points
         # maybe take care of those later
-        if y_right >= 0 and y_right <=1:
+        if y_right >= 0 and y_right <= 1:
             points.append(Vec2(1, y_right))
-        if y_left >= 0 and y_left <=1:
+        if y_left >= 0 and y_left <= 1:
             points.append(Vec2(0, y_left))
-        if x_bottom >= 0 and x_bottom <=1:
+        if x_bottom >= 0 and x_bottom <= 1:
             points.append(Vec2(x_bottom, 0))
         if x_top >= 0 and x_top <= 1:
             points.append(Vec2(x_top, 1))
         self.draw_line(points[0], points[1])
-        # normal
+        # normal drawing
         midpoint = Vec2((constraint.p1.x + constraint.p2.x) / 2, (constraint.p1.y + constraint.p2.y) / 2)
         endpoint = Vec2(midpoint.x + constraint.normal.x * 0.05, midpoint.y + constraint.normal.y * 0.05)
         self.draw_line(midpoint, endpoint, "blue")
-        
 
-    # maybe call this from some other event instead of when points are set
+    # maybe call this from some other event (e.g. button) instead of when points are set
     def add_constraint(self, start, end):
         if start and end:
             p1 = self.to_cartesian(start)
             p2 = self.to_cartesian(end)
             constraint = self.lp.add_constraint(p1, p2)
             self.draw_constraint(constraint)
-            #self.draw_line(self.start_pos, self.end_pos)
+            
             self.start_pos = None
             self.end_pos = None
-    
+
+    def generate_lp(self):
+        self.lp.generate(20)
+        for constraints in self.lp.constraints:
+            self.draw_constraint(constraints)
+
     def draw_point(self, point):
         point = self.from_cartesian(point)
         self.canvas.create_oval(point.x - 5, point.y - 5, point.x + 5, point.y + 5, fill="green")
@@ -312,6 +331,7 @@ class DrawHandler:
     def solve_lp(self):
         result = self.lp.solve()
         if result:
+            print("opt.x: " + str(result.x) + ", op.y: " + str(result.y))
             self.draw_point(result)
 
 dh = DrawHandler()
