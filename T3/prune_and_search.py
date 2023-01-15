@@ -3,13 +3,15 @@
 from tkinter import Tk, Canvas, Button
 import math
 
+# this is actually 2 ** 32 and not the real max int in python
 MAX_INT = 4294967296
+# floating point offset
+EPS = 0.000001
 
 class Vec2():
     def __init__(self, x, y) -> None:
         self.x = x
         self.y = y
-
 
 def same_sign(x1, x2):
     return (x1 < 0) == (x2 < 0)
@@ -73,8 +75,11 @@ class LinearProgram:
             return None
 
     def generate_tuple(self, constraint_list):
+        length = len(constraint_list)
+        if length < 2:
+            return None
         result = []
-        for idx in range(0, len(constraint_list), 2):
+        for idx in range(0, length - length % 2, 2):
             result.append((constraint_list[idx], constraint_list[idx + 1]))
         return result
 
@@ -88,7 +93,6 @@ class LinearProgram:
         return Vec2(median_x, median_y)
 
     def find_bound(self, constraints, median, isUp):
-        eps = 0.0001
         bound = []
         if isUp:
             value = -MAX_INT
@@ -96,8 +100,8 @@ class LinearProgram:
             value = MAX_INT
         for constraint in constraints:
             y_intersect = constraint.calc_y(median.x) 
-            # constraints that fulfills g with equality
-            if abs(value - y_intersect) < eps:
+            # constraint that fulfills 'value' with equality
+            if abs(value - y_intersect) < EPS:
                 bound.append(constraint)
             elif (isUp and y_intersect > value) or (not isUp and y_intersect < value):
                 value = y_intersect
@@ -110,34 +114,64 @@ class LinearProgram:
         for constraint in bound:
             val_min = min(constraint.m, val_min)
             val_max = max(constraint.m, val_max)
+        return val_min, val_max
+
+    # op is > in up case and < in down case
+    def prune_one(self, pairs, a, b, out, op):
+        if not pairs:
+            return
+        # op = >
+        for l1, l2 in pairs:
+            # we could also store this somewhere ig
+            intersection = self.compute_intersection(l1, l2)
+            if abs(l1.m - l2.m) < EPS:
+                if op(l1.b, l2.b):
+                    # this is not really linear anymore, fix later
+                    out.remove(l1)
+                else:
+                    out.remove(l2)
+            # intersection is left of lower bound
+            elif (intersection.x - EPS) < a:
+                # remove constraint with lower slope
+                if op(l1.m, l2.m):
+                    out.remove(l2)
+                else:
+                    out.remove(l1)
+            elif (intersection.x + EPS) > b:
+                # remove constraint with higher slope
+                if op(l1.m, l2.m):
+                    out.remove(l1)
+                else:
+                    out.remove(l2)
+
+    def prune(self, up_pairs, down_pairs, a, b, up, down):
+        self.prune_one(up_pairs, a, b, up, lambda x, y: x > y)
+        self.prune_one(down_pairs, a, b, down, lambda x, y: x < y)
+        return up, down
 
     def prune_and_search(self, up, down):
         a = -MAX_INT
         b = MAX_INT
-        while (len(up) + len(down)) > 2:
+        while (len(up) + len(down)) > 4:
             up_pairs = self.generate_tuple(up)
             down_pairs = self.generate_tuple(down)
             if len(up) >= len(down):
-                isUp = True
                 pairs = up_pairs
             else:
-                isUp = False
                 pairs = down_pairs
             
             median = self.find_median(pairs)
             # g denotes the lower bound, so the maximum constraint where the normal points upwards (at pos x)
-            g, lower = self.find_bound(up, median, isUp)
+            g, lower = self.find_bound(up, median, True)
             # h denotes the upper bound
-            h, upper = self.find_bound(down, median, isUp)
+            # h seems wrong
+            h, upper = self.find_bound(down, median, False)
             
             # min, max slope wrt g
             g_min, g_max = self.find_slopes(lower) #sg, Sg
             # min, max slope wrt h
             h_min, h_max = self.find_slopes(upper) #sh, Sh
 
-            # no feasible solution exists
-            if g_min <= h_max and g_max >= h_min:
-                return None
 
             # point is not feasible, change interval in correct direction
             if g > h:
@@ -147,19 +181,36 @@ class LinearProgram:
                 # median is right of feasible region -> go left
                 if g_max < h_min:
                     a = median.x
+                # no feasible solution exists
+                if g_min <= h_max and g_max >= h_min:
+                    return None
+
             # point is feasible, check which constraints to prune
+            elif g < h:
+                if g_min > 0:
+                    b = median.x
+                if g_max < 0:
+                    a = median.x
+                # optimal solution
+                if g_min < 0 and g_max > 0:
+                    return median
+            # point is feasible and g = h
+            # somewhat theoretical case because of floating point precision
+            # i could see that this actually returns wrong results if two lines are exactly the same, one pointing up and one down
+            # and the one pointing up is slightly shifted above because of floating point precision
             else:
-                if g_min < 0 and g_min >= h_max:
+                if g_min > 0 and g_min >= h_max:
                     b = median.x
                 if g_max < 0 and g_max <= h_min:
                     a = median.x
-            # optimal solution
-            if g_min < 0 and g_max > 0:
-                return median
+                # optimal solution
+                if g_min < 0 and g_max > 0:
+                    return median
+            up, down = self.prune(up_pairs, down_pairs, a, b, up, down)                    
         return self.brute_force(up + down)
 
     def solve(self):
-        return self.brute_force(self.constraints)
+        #return self.brute_force(self.constraints)
         up = []
         down = []
         for constraint in self.constraints:
@@ -168,9 +219,7 @@ class LinearProgram:
             else:
                 down.append(constraint)
     
-        self.prune_and_search(up, down)
-
-            
+        return self.prune_and_search(up, down)
 
 class DrawHandler:
     def __init__(self) -> None:
@@ -184,7 +233,7 @@ class DrawHandler:
         self.lp = LinearProgram()
         self.canvas.bind("<Button-1>", self.handle_lclick)
         self.canvas.bind("<Button-3>", self.handle_rclick)
-        Button(self.window, text="Prune and Search", command=self.prune_and_search).pack()
+        Button(self.window, text="Prune and Search", command=self.solve_lp).pack()
         self.add_constraint(Vec2(500, 160), Vec2(100, 150)) 
         self.add_constraint(Vec2(100, 150), Vec2(120, 460))
         self.add_constraint(Vec2(200, 500), Vec2(310, 510))
