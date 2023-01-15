@@ -1,8 +1,9 @@
 # paper: https://theory.stanford.edu/~megiddo/pdf/lp3.pdf
 
-from tkinter import Tk, Canvas, Button
+from tkinter import Tk, Canvas, Button, Entry
 import math
 import random
+import time
 
 # this is actually 2 ** 32 and not the real max int in python (int is unbound)
 MAX_INT = 4294967296
@@ -44,6 +45,8 @@ class Constraint:
 class LinearProgram:
     def __init__(self) -> None:
         self.constraints = []
+        self.intersection_log = []
+        self.constraints_log = []
 
     def add_constraint(self, start, end):
         constraint = Constraint(start, end)
@@ -140,33 +143,40 @@ class LinearProgram:
     def prune_one(self, pairs, a, b, out, op):
         if not pairs:
             return
+        removed_lines = []
         # op = >
         for l1, l2 in pairs:
-            # we could also store this somewhere ig
+            line_to_remove = None
+            # could also store this somewhere ig
             intersection = self.compute_intersection(l1, l2)
             if abs(l1.m - l2.m) < EPS:
                 if op(l1.b, l2.b):
+                    line_to_remove = l1
                     # this is not really linear anymore, fix later
-                    out.remove(l1)
                 else:
-                    out.remove(l2)
+                    line_to_remove = l2
             # intersection is left of lower bound
             elif (intersection.x - EPS) < a:
                 # remove constraint with lower slope
                 if op(l1.m, l2.m):
-                    out.remove(l2)
+                    line_to_remove = l2
                 else:
-                    out.remove(l1)
+                    line_to_remove = l1
             elif (intersection.x + EPS) > b:
                 # remove constraint with higher slope
                 if op(l1.m, l2.m):
-                    out.remove(l1)
+                    line_to_remove = l1
                 else:
-                    out.remove(l2)
+                    line_to_remove = l2
+            if line_to_remove:
+                out.remove(line_to_remove)
+                removed_lines.append(line_to_remove)
+        return removed_lines
 
     def prune(self, up_pairs, down_pairs, a, b, up, down):
-        self.prune_one(up_pairs, a, b, up, lambda x, y: x > y)
-        self.prune_one(down_pairs, a, b, down, lambda x, y: x < y)
+        removed_up_lines = self.prune_one(up_pairs, a, b, up, lambda x, y: x > y)
+        removed_down_lines = self.prune_one(down_pairs, a, b, down, lambda x, y: x < y)
+        self.constraints_log.append(removed_up_lines + removed_down_lines)
         return up, down
 
     def prune_and_search(self, up, down):
@@ -226,6 +236,7 @@ class LinearProgram:
                 # optimal solution
                 if g_min < 0 and g_max > 0:
                     return median
+            self.intersection_log.append(median)
             up, down = self.prune(up_pairs, down_pairs, a, b, up, down)                    
         return self.brute_force(up + down)
 
@@ -239,13 +250,15 @@ class LinearProgram:
             else:
                 down.append(constraint)
     
+        self.constraints_log = []
+        self.intersection_log = []
         return self.prune_and_search(up, down)
 
 class DrawHandler:
     def __init__(self) -> None:
         self.window = Tk()
-        self.canvas_x = 600
-        self.canvas_y = 600
+        self.canvas_x = 800
+        self.canvas_y = 800
         self.canvas = Canvas(self.window, width=self.canvas_x, height=self.canvas_y)
         self.canvas.pack()
         self.start_pos = None
@@ -253,8 +266,15 @@ class DrawHandler:
         self.lp = LinearProgram()
         self.canvas.bind("<Button-1>", self.handle_lclick)
         self.canvas.bind("<Button-3>", self.handle_rclick)
+        self.entry = Entry(self.window, text="Number of constraints", bd=5)
+        self.entry.pack()
+        Button(self.window, text="Generate", command=self.generate_lp).pack()
         Button(self.window, text="Solve", command=self.solve_lp).pack()
-        self.generate_lp()
+        Button(self.window, text="Clear everything", command=self.clear).pack()
+        Button(self.window, text="Clear visualization steps", command=self.clear_drawing).pack()
+        #self.generate_lp()
+        self.lp_drawing = []
+        self.lp_solve_vis = []
         self.window.mainloop()
 
     def handle_lclick(self, event):
@@ -269,6 +289,16 @@ class DrawHandler:
         self.end_pos = Vec2(x, y)
         self.add_constraint(self.start_pos, self.end_pos)
 
+    def clear(self):
+        for obj in self.lp_drawing:
+            self.canvas.delete(obj)
+        for obj in self.lp_solve_vis:
+            self.canvas.delete(obj)
+
+    def clear_drawing(self):
+        for obj in self.lp_solve_vis:
+            self.canvas.delete(obj)
+
     def to_cartesian(self, point):
         x = point.x / self.canvas_x
         y = 1 - (point.y / self.canvas_y)
@@ -282,9 +312,9 @@ class DrawHandler:
     def draw_line(self, start, end, color = "black"):
         p1 = self.from_cartesian(start)
         p2 = self.from_cartesian(end)
-        self.canvas.create_line(p1.x, p1.y, p2.x, p2.y, width=2, fill=color)
+        return self.canvas.create_line(p1.x, p1.y, p2.x, p2.y, width=2, fill=color)
 
-    def draw_constraint(self, constraint):
+    def draw_constraint(self, constraint, color="black", normal=True):
         y_right = constraint.m * 1 + constraint.b
         y_left = constraint.m * 0 + constraint.b
         x_bottom = (0 - constraint.b) / constraint.m
@@ -302,11 +332,13 @@ class DrawHandler:
             points.append(Vec2(x_bottom, 0))
         if x_top >= 0 and x_top <= 1:
             points.append(Vec2(x_top, 1))
-        self.draw_line(points[0], points[1])
-        # normal drawing
-        midpoint = Vec2((constraint.p1.x + constraint.p2.x) / 2, (constraint.p1.y + constraint.p2.y) / 2)
-        endpoint = Vec2(midpoint.x + constraint.normal.x * 0.05, midpoint.y + constraint.normal.y * 0.05)
-        self.draw_line(midpoint, endpoint, "blue")
+        if normal:
+            # normal drawing
+            midpoint = Vec2((constraint.p1.x + constraint.p2.x) / 2, (constraint.p1.y + constraint.p2.y) / 2)
+            endpoint = Vec2(midpoint.x + constraint.normal.x * 0.05, midpoint.y + constraint.normal.y * 0.05)
+            n = self.draw_line(midpoint, endpoint, "blue")
+            self.lp_drawing.append(n)
+        return self.draw_line(points[0], points[1], color=color)
 
     # maybe call this from some other event (e.g. button) instead of when points are set
     def add_constraint(self, start, end):
@@ -314,24 +346,62 @@ class DrawHandler:
             p1 = self.to_cartesian(start)
             p2 = self.to_cartesian(end)
             constraint = self.lp.add_constraint(p1, p2)
-            self.draw_constraint(constraint)
-            
+            line = self.draw_constraint(constraint)
+            self.lp_drawing.append(line)
+
             self.start_pos = None
             self.end_pos = None
 
     def generate_lp(self):
-        self.lp.generate(20)
+        amount = self.entry.get()
+        if not amount:
+            return
+        self.clear()
+        self.lp = LinearProgram()
+        self.lp.generate(int(amount))
         for constraints in self.lp.constraints:
-            self.draw_constraint(constraints)
+            line = self.draw_constraint(constraints)
+            self.lp_drawing.append(line)
 
-    def draw_point(self, point):
+    def draw_point(self, point, size=5, color="green"):
         point = self.from_cartesian(point)
-        self.canvas.create_oval(point.x - 5, point.y - 5, point.x + 5, point.y + 5, fill="green")
+        return self.canvas.create_oval(point.x - size, point.y - size, point.x + size, point.y + size, fill=color)
+
+    def redraw_constraints(self, leftovers):
+        for idx, constraint in enumerate(leftovers):
+            obj_idx = len(self.lp_solve_vis) - len(leftovers) + idx - 1
+            self.canvas.delete(self.lp_solve_vis[obj_idx]) 
+            line = self.draw_constraint(constraint, color="white", normal=False)
+            self.lp_solve_vis[obj_idx] = line
+
+    def visualize_pns(self):
+        # both should have the same length
+        intersection_log = self.lp.intersection_log
+        constraints_log = self.lp.constraints_log
+        leftovers = []
+        for i in range(len(intersection_log)):
+            point = self.draw_point(intersection_log[i], size=3, color="red")
+            self.lp_solve_vis.append(point)
+            self.window.update()
+            time.sleep(0.3)
+            self.redraw_constraints(leftovers)
+            leftovers = []
+
+            for constraint in constraints_log[i]:
+                line = self.draw_constraint(constraint, color="red", normal=False)
+                self.lp_solve_vis.append(line)
+                leftovers.append(constraint)
+                time.sleep(0.5)
+        self.redraw_constraints(leftovers)
 
     def solve_lp(self):
         result = self.lp.solve()
         if result:
             print("opt.x: " + str(result.x) + ", op.y: " + str(result.y))
-            self.draw_point(result)
+            self.visualize_pns()
+            opt_point = self.draw_point(result)
+            self.lp_solve_vis.append(opt_point)
+        else:
+            print("lp is infeasible")
 
 dh = DrawHandler()
