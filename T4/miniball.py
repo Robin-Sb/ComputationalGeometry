@@ -60,6 +60,8 @@ class MSW:
         d1 = p1.x ** 2 + p1.y ** 2
         d2 = d1 - p2.x ** 2 - p2.y ** 2
         d3 = d1 - p3.x ** 2 - p3.y ** 2
+        # this can be 0 somehow
+        # in theory by chance i guess 
         ab = a3 * b2 - a2 * b3
         xa = (b2 * d3 - b3 * d2) / (ab * 2) - p1.x
         ya = (a3 * d2 - a2 * d3) / (ab * 2) - p1.y
@@ -119,6 +121,32 @@ class MSW:
                 self.circle = self.enclosing_basis()
                 i = 0
         return self.circle
+    
+    def solve_naive(self):
+        min_r = 2 ** 32
+        for i in range(len(self.points)):
+            for j in range(len(self.points)):
+                if i == j:
+                    continue
+                circle = self.construct_circle_2(self.points[i], self.points[j])
+                if circle.encloses_all(self.points):
+                    if circle.r < min_r:
+                        min_r = circle.r
+                        self.circle = circle
+
+        for i in range(len(self.points)):
+            for j in range(len(self.points)):
+                for k in range(len(self.points)):
+                    if i == j or j == k or k == i:
+                        continue
+                    circle = self.construct_circle_3(self.points[i], self.points[j], self.points[k])
+                    if circle.encloses_all(self.points):
+                        if circle.r < min_r:
+                            min_r = circle.r
+                            self.circle = circle
+        return self.circle
+
+                
 
 class DrawHandler:
     def __init__(self) -> None:
@@ -149,7 +177,8 @@ class DrawHandler:
         self.draw_point(point)    
 
     def solve(self):
-        circle = self.msw.find_enclosing_circle()
+        #circle = self.msw.find_enclosing_circle()
+        circle = self.msw.solve_naive()
         self.circle_obj = self.draw_circle(circle)
 
 dh = DrawHandler()
