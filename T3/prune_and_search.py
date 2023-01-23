@@ -1,5 +1,4 @@
 # paper: https://theory.stanford.edu/~megiddo/pdf/lp3.pdf
-
 from tkinter import Tk, Canvas, Button, Entry
 import math
 import random
@@ -143,10 +142,8 @@ class LinearProgram:
         if not pairs:
             return
         removed_lines = []
-        # op = >
         for l1, l2 in pairs:
             line_to_remove = None
-            # could also store this somewhere ig
             intersection = self.compute_intersection(l1, l2)
             if abs(l1.m - l2.m) < EPS:
                 if op(l1.b, l2.b):
@@ -335,7 +332,6 @@ class DrawHandler:
             self.lp_drawing.append(n)
         return self.draw_line(points[0], points[1], color=color)
 
-    # maybe call this from some other event (e.g. button) instead of when points are set
     def add_constraint(self, start, end):
         if start and end:
             p1 = self.to_cartesian(start)
