@@ -3,7 +3,6 @@ import math
 import random
 import time
 
-
 EPS = 0.0001
 class Vec2:
     def __init__(self, x, y) -> None:
@@ -34,6 +33,15 @@ class MSW:
         self.points = []
         self.circle = None
         self.basis = []
+
+    def generate_points(self, n, x_dim, y_dim):
+        points = []
+        for i in range(n):
+            x = random.random() * (x_dim - 200) + 100
+            y = random.random() * (y_dim - 200) + 100
+            points.append(Vec2(x,y))
+        self.points += points
+        return points
 
     def encloses_all(self, circle):
         for point in self.points:
@@ -146,8 +154,6 @@ class MSW:
                             self.circle = circle
         return self.circle
 
-                
-
 class DrawHandler:
     def __init__(self) -> None:
         self.window = Tk()
@@ -159,6 +165,10 @@ class DrawHandler:
         self.canvas.bind("<Button-1>", self.handle_lclick)
         self.circle_obj = None
         Button(self.window, text="Solve", command=self.solve).pack()
+        self.entry = Entry(self.window, text="Number of Points", bd=5)
+        self.entry.pack()        
+        Button(self.window, text="Generate", command=self.generate).pack()
+        #self.msw.generate_points(200, self.canvas_x, self.canvas_y)
         self.window.mainloop()
 
     def draw_point(self, point):
@@ -167,7 +177,7 @@ class DrawHandler:
     def draw_circle(self, circle):
         if self.circle_obj:
             self.canvas.delete(self.circle_obj)
-        return self.canvas.create_oval(circle.x + circle.r, circle.y + circle.r, circle.x - circle.r, circle.y - circle.r)
+        return self.canvas.create_oval(circle.x + circle.r, circle.y + circle.r, circle.x - circle.r, circle.y - circle.r, outline="pink", width=4)
 
     def handle_lclick(self, event):
         x = self.canvas.canvasx(event.x)
@@ -176,9 +186,16 @@ class DrawHandler:
         self.msw.points.append(point)
         self.draw_point(point)    
 
+    def generate(self):
+        n = int(self.entry.get())
+        points = self.msw.generate_points(n, self.canvas_x, self.canvas_y)
+        for point in points:
+            self.draw_point(point)
+
+
     def solve(self):
-        #circle = self.msw.find_enclosing_circle()
-        circle = self.msw.solve_naive()
+        circle = self.msw.find_enclosing_circle()
+        #circle = self.msw.solve_naive()
         self.circle_obj = self.draw_circle(circle)
 
 dh = DrawHandler()
