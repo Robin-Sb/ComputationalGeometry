@@ -16,7 +16,6 @@ class Circle:
         self.r = r
 
     def encloses(self, point):
-        # maybe take care of floating point precision here
         dist = (point.x - self.x) ** 2 + (point.y - self.y) ** 2
         if dist < self.r ** 2 + EPS:
             return True
@@ -33,6 +32,7 @@ class MSW:
         self.points = []
         self.circle = None
         self.basis = []
+        self.circle_log = []
 
     def generate_points(self, n, x_dim, y_dim):
         points = []
@@ -69,8 +69,7 @@ class MSW:
         d1 = p1.x ** 2 + p1.y ** 2
         d2 = d1 - p2.x ** 2 - p2.y ** 2
         d3 = d1 - p3.x ** 2 - p3.y ** 2
-        # this can be 0 somehow
-        # in theory by chance i guess 
+        # this can be 0 in theory i think 
         ab = a3 * b2 - a2 * b3
         xa = (b2 * d3 - b3 * d2) / (ab * 2) - p1.x
         ya = (a3 * d2 - a2 * d3) / (ab * 2) - p1.y
@@ -107,7 +106,7 @@ class MSW:
                     self.basis = [p, p1, p2]
                     return
     
-    def check_if_in_basis(self,p):
+    def check_if_in_basis(self, p):
         for pb in self.basis:
             if pb == p:
                 return True
@@ -116,6 +115,7 @@ class MSW:
     def find_enclosing_circle(self):
         self.basis = [self.points[0], self.points[1]]
         self.circle = self.construct_circle_2(self.basis[0], self.basis[1])
+        self.circle_log = []        
         i = 0
         n = len(self.points)
         while i < n:
@@ -128,6 +128,7 @@ class MSW:
             else:
                 self.extend_basis(p)
                 self.circle = self.enclosing_basis()
+                self.circle_log.append(self.circle)
                 i = 0
         return self.circle
     
@@ -167,7 +168,8 @@ class DrawHandler:
         self.circle_obj = None
         self.entry = Entry(self.window, text="Number of Points", bd=5)
         self.entry.pack()        
-        self.tk_objects = []
+        self.tk_points = []
+        self.tk_circles = []
 
         Button(self.window, text="Generate and Solve", command=self.gen_and_solve).pack()
         Button(self.window, text="Generate", command=self.generate).pack()
@@ -179,10 +181,10 @@ class DrawHandler:
     def draw_point(self, point):
         return self.canvas.create_oval(point.x -1, point.y - 1, point.x + 1, point.y + 1, fill="black")
 
-    def draw_circle(self, circle):
+    def draw_circle(self, circle, color, size):
         if self.circle_obj:
             self.canvas.delete(self.circle_obj)
-        return self.canvas.create_oval(circle.x + circle.r, circle.y + circle.r, circle.x - circle.r, circle.y - circle.r, outline="pink", width=1)
+        return self.canvas.create_oval(circle.x + circle.r, circle.y + circle.r, circle.x - circle.r, circle.y - circle.r, outline=color, width=size)
 
     def handle_lclick(self, event):
         x = self.canvas.canvasx(event.x)
@@ -190,7 +192,7 @@ class DrawHandler:
         point = Vec2(x, y)
         self.msw.points.append(point)
         new_point = self.draw_point(point)
-        self.tk_objects.append(new_point)    
+        self.tk_points.append(new_point)    
 
     def generate(self):
         self.reset()
@@ -198,13 +200,22 @@ class DrawHandler:
         points = self.msw.generate_points(n, self.canvas_x, self.canvas_y)
         for point in points:
             new_point = self.draw_point(point)
-            self.tk_objects.append(new_point)
+            self.tk_points.append(new_point)
         self.window.update()
 
-    def clear(self):
-        for obj in self.tk_objects:
-            self.canvas.delete(obj)
-        self.tk_objects = []
+    def clear_all(self):
+        self.clear_circles()
+        self.clear_points()
+
+    def clear_points(self):
+        for tk_point in self.tk_points:
+            self.canvas.delete(tk_point)
+        self.tk_points = []
+
+    def clear_circles(self):
+        for tk_circle in self.tk_circles:
+            self.canvas.delete(tk_circle) 
+        self.tk_circles = []
 
     def solve(self):
         if len(self.msw.points) < 2:
@@ -213,16 +224,36 @@ class DrawHandler:
         #circle = self.msw.solve_naive()
         #self.circle_obj = self.draw_circle(circle)
         #self.window.update()
-        circle = self.msw.find_enclosing_circle()
-        self.circle_obj = self.draw_circle(circle)
-        self.tk_objects.append(self.circle_obj)
+        self.clear_circles()
+        start = time.time()
+        circle_msw = self.msw.find_enclosing_circle()
+        end = time.time()
+        print("Center: " + str(circle_msw.x) + ", " + str(circle_msw.y) + ", radius: " + str(circle_msw.r))
+        print("Time taken MSW: " + str(end - start))
+        self.animate()
+        self.circle_obj = self.draw_circle(circle_msw, "pink", 3)
+        self.tk_circles.append(self.circle_obj)
+        self.window.update()
+        
+        start_naive = time.time()
+        circle_naive = self.msw.solve_naive()
+        end_naive = time.time()
+        print("Center: " + str(circle_naive.x) + ", " + str(circle_naive.y) + ", radius: " + str(circle_naive.r))
+        print("Time taken naive: " + str(end_naive - start_naive))
     
     def reset(self):
-        self.clear()
+        self.clear_all()
         self.msw = MSW()
 
     def gen_and_solve(self):
         self.generate()
         self.solve()
+
+    def animate(self):
+        for circle in self.msw.circle_log:
+            tk_circle = self.draw_circle(circle, "green", 1)
+            self.tk_circles.append(tk_circle)
+            self.window.update()
+            time.sleep(0.5)
 
 dh = DrawHandler()
