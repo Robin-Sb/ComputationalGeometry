@@ -104,14 +104,47 @@ class LinearProgram:
             result.append((constraint_list[idx], constraint_list[idx + 1]))
         return result
 
+    # expected O(n) median finder, from https://rcoh.me/posts/linear-time-median-finding/
+    def quickselect(self, l, k):
+        """
+        Select the kth element in l (0 based)
+        :param l: List of numerics
+        :param k: Index
+        :return: The kth element of l
+        """
+        if len(l) == 1:
+            assert k == 0
+            return l[0]
+
+        pivot = random.choice(l).x
+
+        lows = [el for el in l if el.x < pivot]
+        highs = [el for el in l if el.x > pivot]
+        pivots = [el for el in l if el.x == pivot]
+
+        if k < len(lows):
+            return self.quickselect(lows, k)
+        elif k < len(lows) + len(pivots):
+            # We got lucky and guessed the median
+            return pivots[0]
+        else:
+            return self.quickselect(highs, k - len(lows) - len(pivots))
+
     def find_median(self, pairs):
         intersections = []
         for constraint1, constraint2 in pairs:
             intersection = self.compute_intersection(constraint1, constraint2)
             intersections.append(intersection)
-        median_x = intersections[math.floor(len(intersections) / 2)].x
-        median_y = intersections[math.floor(len(intersections) / 2)].y        
-        return Vec2(median_x, median_y)
+
+        k = len(intersections) // 2
+        median = self.quickselect(intersections, k)
+
+        # O(n * log n) median finder, for reasonably big instances faster than quickselect
+        # s = sorted(intersections, key = lambda p: p.x)
+        # median_x = s[math.floor(len(s) / 2)].x
+        # median_y = s[math.floor(len(s) / 2)].y   
+        #return Vec2(median_x, median_y)
+        return median
 
     def find_bound(self, constraints, median, isUp):
         bound = []
@@ -138,9 +171,10 @@ class LinearProgram:
         return val_min, val_max
 
     # op is > in up case and < in down case
-    def prune_one(self, pairs, a, b, out, op):
+    def prune_one(self, pairs, a, b, constraints, op):
+        filtered = set()
         if not pairs:
-            return
+            return [], []
         removed_lines = []
         for l1, l2 in pairs:
             line_to_remove = None
@@ -164,15 +198,18 @@ class LinearProgram:
                 else:
                     line_to_remove = l2
             if line_to_remove:
-                out.remove(line_to_remove)
+                filtered.add(line_to_remove)
+                # remove is linear, so the whole algorithm becomes quadratic
+                # out.remove(line_to_remove)
                 removed_lines.append(line_to_remove)
-        return removed_lines
+        out = [line for line in constraints if line not in filtered]
+        return removed_lines, out
 
     def prune(self, up_pairs, down_pairs, a, b, up, down):
-        removed_up_lines = self.prune_one(up_pairs, a, b, up, lambda x, y: x > y)
-        removed_down_lines = self.prune_one(down_pairs, a, b, down, lambda x, y: x < y)
+        removed_up_lines, new_up = self.prune_one(up_pairs, a, b, up, lambda x, y: x > y)
+        removed_down_lines, new_down = self.prune_one(down_pairs, a, b, down, lambda x, y: x < y)
         self.constraints_log.append(removed_up_lines + removed_down_lines)
-        return up, down
+        return new_up, new_down
 
     def prune_and_search(self, up, down):
         a = -MAX_INT
@@ -350,9 +387,10 @@ class DrawHandler:
         self.clear()
         
         self.lp.generate(int(amount))
-        for constraints in self.lp.constraints:
-            line = self.draw_constraint(constraints)
-            self.lp_drawing.append(line)
+        if len(self.lp.constraints) <= 4000:
+            for constraint in self.lp.constraints:
+                line = self.draw_constraint(constraint)
+                self.lp_drawing.append(line)
 
     def draw_point(self, point, size=5, color="green"):
         point = self.from_cartesian(point)

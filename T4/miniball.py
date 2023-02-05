@@ -34,9 +34,8 @@ class MSW:
         self.basis = []
         self.circle_log = []
 
-    def generate_points(self, n, x_dim, y_dim):
+    def generate_points(self, n, x_dim, y_dim, margin = 250):
         points = []
-        margin = 200
         for i in range(n):
             x = random.random() * (x_dim - margin) + (margin / 2)
             y = random.random() * (y_dim - margin) + (margin / 2)
@@ -49,11 +48,6 @@ class MSW:
             if not circle.encloses(point):
                 return False
         return True
-    
-    def test_circle(self):
-        if len(self.points) == 3:
-            return self.construct_circle_3(self.points[0], self.points[1], self.points[2])
-        return None
 
     def construct_circle_2(self, p1, p2):
         x = (p1.x + p2.x) / 2
@@ -89,17 +83,16 @@ class MSW:
             circle = self.construct_circle_2(p, point)
             if circle.encloses_all(self.basis):
                 self.basis = [point, p]
-                #self.circle = circle
                 return
         for i in range(0, len(self.basis) - 1):
             for j in  range(i + 1, len(self.basis)):
                 p1 = self.basis[i]
                 p2 = self.basis[j]
-                old_circle = self.construct_circle_2(p1, p2)
+                circle_opt_0 = self.construct_circle_2(p1, p2)
                 circle_opt_1 = self.construct_circle_2(p1, p)
                 circle_opt_2 = self.construct_circle_2(p2, p)
                 circle_opt_3 = self.construct_circle_3(p1, p2, p)
-                if (not old_circle.encloses(p) and 
+                if (not circle_opt_0.encloses(p) and 
                     not circle_opt_1.encloses(p2) and 
                     not circle_opt_2.encloses(p1) and 
                     circle_opt_3.encloses_all(self.basis)):
@@ -112,19 +105,23 @@ class MSW:
                 return True
         return False
 
+    # main method for msw
     def find_enclosing_circle(self):
-        self.basis = [self.points[0], self.points[1]]
+        self.basis = random.sample(self.points, 2) # [self.points[0], self.points[1]]
         self.circle = self.construct_circle_2(self.basis[0], self.basis[1])
+        # store a log of all circles for animation
         self.circle_log = []        
         i = 0
         n = len(self.points)
         while i < n:
             p = self.points[i]
+            # if point does not violate, just increase the index by 1
             if self.check_if_in_basis(p):
                 i += 1
                 continue
             if self.circle and self.circle.encloses(p):
                 i += 1
+            # if one violates, compute a new basis with the violating point
             else:
                 self.extend_basis(p)
                 self.circle = self.enclosing_basis()
@@ -134,6 +131,7 @@ class MSW:
     
     def solve_naive(self):
         min_r = 2 ** 32
+        # check for all pairs whether one encloses all points (and is minimal)
         for i in range(len(self.points)):
             for j in range(len(self.points)):
                 if i == j:
@@ -144,6 +142,7 @@ class MSW:
                         min_r = circle.r
                         self.circle = circle
 
+        # check for all 3-point pairs whether one encloses all points (and is minimal)
         for i in range(len(self.points)):
             for j in range(len(self.points)):
                 for k in range(len(self.points)):
@@ -159,8 +158,8 @@ class MSW:
 class DrawHandler:
     def __init__(self) -> None:
         self.window = Tk()
-        self.canvas_x = 600
-        self.canvas_y = 600
+        self.canvas_x = 800
+        self.canvas_y = 800
         self.canvas = Canvas(self.window, width=self.canvas_x, height=self.canvas_y)
         self.canvas.pack()
         self.msw = MSW()
@@ -175,7 +174,6 @@ class DrawHandler:
         Button(self.window, text="Generate", command=self.generate).pack()
         Button(self.window, text="Solve", command=self.solve).pack()
         Button(self.window, text="Reset", command=self.reset).pack()
-        #self.msw.generate_points(200, self.canvas_x, self.canvas_y)
         self.window.mainloop()
 
     def draw_point(self, point):
@@ -197,10 +195,11 @@ class DrawHandler:
     def generate(self):
         self.reset()
         n = int(self.entry.get())
-        points = self.msw.generate_points(n, self.canvas_x, self.canvas_y)
-        for point in points:
-            new_point = self.draw_point(point)
-            self.tk_points.append(new_point)
+        points = self.msw.generate_points(n, self.canvas_x, self.canvas_y, self.canvas_x / 3)
+        if len(points) < 50000:
+            for point in points:
+                new_point = self.draw_point(point)
+                self.tk_points.append(new_point)
         self.window.update()
 
     def clear_all(self):
@@ -221,25 +220,24 @@ class DrawHandler:
         if len(self.msw.points) < 2:
             print("At least two points needed")
             return
-        #circle = self.msw.solve_naive()
-        #self.circle_obj = self.draw_circle(circle)
-        #self.window.update()
         self.clear_circles()
         start = time.time()
         circle_msw = self.msw.find_enclosing_circle()
         end = time.time()
         print("Center: " + str(circle_msw.x) + ", " + str(circle_msw.y) + ", radius: " + str(circle_msw.r))
         print("Time taken MSW: " + str(end - start))
-        self.animate()
+        if len(self.msw.points) < 50000:
+            self.animate() 
         self.circle_obj = self.draw_circle(circle_msw, "pink", 3)
         self.tk_circles.append(self.circle_obj)
         self.window.update()
         
-        start_naive = time.time()
-        circle_naive = self.msw.solve_naive()
-        end_naive = time.time()
-        print("Center: " + str(circle_naive.x) + ", " + str(circle_naive.y) + ", radius: " + str(circle_naive.r))
-        print("Time taken naive: " + str(end_naive - start_naive))
+        if len(self.msw.points) < 200:
+            start_naive = time.time()
+            circle_naive = self.msw.solve_naive()
+            end_naive = time.time()
+            print("Center: " + str(circle_naive.x) + ", " + str(circle_naive.y) + ", radius: " + str(circle_naive.r))
+            print("Time taken naive: " + str(end_naive - start_naive))
     
     def reset(self):
         self.clear_all()
